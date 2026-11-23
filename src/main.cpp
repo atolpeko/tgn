@@ -15,8 +15,8 @@
 #endif
 
 #include "cli.hpp"
-#include "text.hpp"
 #include "telegram.hpp"
+#include "text.hpp"
 
 // True when stdin is a terminal
 bool stdin_is_tty() {
@@ -62,7 +62,8 @@ std::optional<std::string> resolve_message(const Args& args) {
     const auto units = utf16_length(text);
     if (units > kMaxMessageLength) {
         std::cerr << "tgn: message is too long (" << units
-         << " characters, Telegram allows " << kMaxMessageLength << ")\n";
+                  << " characters, Telegram allows " << kMaxMessageLength
+                  << ")\n";
         return std::nullopt;
     }
 
@@ -81,16 +82,20 @@ int main(int argc, char** argv) {
 
     Args args;
     switch (parse_args(argc, argv, args)) {
-        case ParseResult::Continue:    break;
-        case ParseResult::ExitSuccess: exit_with(ExitCode::Ok);
-        case ParseResult::ExitFailure: exit_with(ExitCode::Usage);
+        case ParseResult::Continue:
+            break;
+        case ParseResult::ExitSuccess:
+            exit_with(ExitCode::Ok);
+        case ParseResult::ExitFailure:
+            exit_with(ExitCode::Usage);
     }
-    if (!validate_args(args)) exit_with(ExitCode::Config);
+    if (!validate_args(args))
+        exit_with(ExitCode::Config);
 
     std::optional<std::string> message = resolve_message(args);
-    if (!message) exit_with(ExitCode::Usage);
+    if (!message)
+        exit_with(ExitCode::Usage);
 
-    // Both are engaged: validate_args() returned true above.
     tg::BotClient client(*args.bot_token, *args.chat_id);
     tg::BotError error = client.send(*message);
     if (error != tg::BotError::None) {

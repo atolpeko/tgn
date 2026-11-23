@@ -1,21 +1,21 @@
 #pragma once
 
+#include <curl/curl.h>
+
 #include <memory>
 #include <ostream>
 #include <string>
-
-#include <curl/curl.h>
 
 namespace tg {
 
 enum class BotError {
     None,
     Initialization,
-    Encoding,       
+    Encoding,
     Transport,
     Timeout,
     Unauthorized,
-    Forbidden,      
+    Forbidden,
     RateLimited,
     BadRequest,
     ServerError,
@@ -43,4 +43,4 @@ private:
     std::string chat_id_;
 };
 
-} // namespace tg
+}  // namespace tg

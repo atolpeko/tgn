@@ -10,10 +10,12 @@ void define_args(CLI::App& app, Args& out) {
     app.usage("USAGE:\ntgn [options] <message>\n<command> | tgn [options]");
     app.footer(
         "Use '--' before a message that starts with '-'.\n"
-        "Exit codes: 0 ok, 1 usage error, 2 config error, 3 Telegram connection error");
+        "Exit codes: 0 ok, 1 usage error, 2 config error, 3 Telegram "
+        "connection error");
 
-    app.add_option("message", out.message,
-                   "Message text, '-' to read stdin, or omitted (with piped stdin)")
+    app.add_option(
+           "message", out.message,
+           "Message text, '-' to read stdin, or omitted (with piped stdin)")
         ->expected(0, 1);
 
     app.add_option("-T, --token", out.bot_token,
@@ -54,5 +56,3 @@ ParseResult parse_args(int argc, char** argv, Args& out) {
 
     return ParseResult::Continue;
 }
-
-

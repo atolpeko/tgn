@@ -1,0 +1,13 @@
+# clang-format -i src/*.cpp src/*.hpp
+BasedOnStyle: Google
+Language: Cpp
+Standard: c++17
+IndentWidth: 4
+ColumnLimit: 80
+AccessModifierOffset: -4
+BreakBeforeBraces: Attach
+PointerAlignment: Left
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+IncludeBlocks: Regroup
+SortIncludes: CaseSensitive

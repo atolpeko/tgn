@@ -4,21 +4,21 @@
 #include <string>
 
 struct Args {
-    std::optional<std::string> bot_token;  // nullopt => not supplied (env or CLI)
-    std::optional<std::string> chat_id;    // nullopt => not supplied (env or CLI)
-    std::optional<std::string> message;    // nullopt or "-" => read stdin
+    std::optional<std::string> bot_token;// nullopt => not supplied (env/cli)
+    std::optional<std::string> chat_id;  // nullopt => not supplied (env/cli)
+    std::optional<std::string> message;  // nullopt or "-" => read stdin
 };
 
 enum class ExitCode : int {
-    Ok = 0,       
-    Usage = 1,    
-    Config = 2,   
-    Network = 3,  
+    Ok = 0,
+    Usage = 1,
+    Config = 2,
+    Network = 3,
 };
 
 enum class ParseResult {
     Continue,
-    ExitSuccess, // -- help or --version
+    ExitSuccess,  // -- help or --version
     ExitFailure,
 };
 

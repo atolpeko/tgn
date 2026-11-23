@@ -32,7 +32,8 @@ size_t discard_body(char*, size_t size, size_t nmemb, void*) {
 }
 
 std::optional<std::string> form_escape(CURL* curl, const std::string& text) {
-    if (text.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+    if (text.size() >
+        static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         return std::nullopt;  // libcurl takes an int length
     }
 
@@ -56,15 +57,21 @@ tg::BotError classify(CURLcode rc, long http_code) noexcept {
     }
 
     switch (http_code) {
-        case 200: return tg::BotError::None;
-        case 400: return tg::BotError::BadRequest;
-        case 401: return tg::BotError::Unauthorized;
-        case 403: return tg::BotError::Forbidden;
-        case 404: return tg::BotError::Unauthorized; 
-        case 429: return tg::BotError::RateLimited;
-        default:  return http_code >= 500 
-            ? tg::BotError::ServerError 
-            : tg::BotError::Unknown;
+        case 200:
+            return tg::BotError::None;
+        case 400:
+            return tg::BotError::BadRequest;
+        case 401:
+            return tg::BotError::Unauthorized;
+        case 403:
+            return tg::BotError::Forbidden;
+        case 404:
+            return tg::BotError::Unauthorized;
+        case 429:
+            return tg::BotError::RateLimited;
+        default:
+            return http_code >= 500 ? tg::BotError::ServerError
+                                    : tg::BotError::Unknown;
     }
 }
 
@@ -74,22 +81,32 @@ namespace tg {
 
 std::ostream& operator<<(std::ostream& os, BotError e) {
     switch (e) {
-        case BotError::None:           return os << "none";
-        case BotError::Initialization: return os << "initialization error";
-        case BotError::Encoding:       return os << "encoding error";
-        case BotError::Transport:      return os << "transport error";
-        case BotError::Timeout:        return os << "timeout";
-        case BotError::Unauthorized:   return os << "unauthorized";
-        case BotError::Forbidden:      return os << "forbidden";
-        case BotError::RateLimited:    return os << "rate limited";
-        case BotError::BadRequest:     return os << "bad request";
-        case BotError::ServerError:    return os << "server error";
-        case BotError::Unknown:        return os << "unknown error";
+        case BotError::None:
+            return os << "none";
+        case BotError::Initialization:
+            return os << "initialization error";
+        case BotError::Encoding:
+            return os << "encoding error";
+        case BotError::Transport:
+            return os << "transport error";
+        case BotError::Timeout:
+            return os << "timeout";
+        case BotError::Unauthorized:
+            return os << "unauthorized";
+        case BotError::Forbidden:
+            return os << "forbidden";
+        case BotError::RateLimited:
+            return os << "rate limited";
+        case BotError::BadRequest:
+            return os << "bad request";
+        case BotError::ServerError:
+            return os << "server error";
+        case BotError::Unknown:
+            return os << "unknown error";
     }
 
     return os << "unknown(" << static_cast<int>(e) << ')';
 }
-
 
 BotClient::BotClient(std::string token, std::string chat_id)
     : curl_(curl_init(), &curl_easy_cleanup),
@@ -108,7 +125,8 @@ BotError BotClient::send(const std::string& message) const {
     }
 
     const auto url = "https://api.telegram.org/bot" + token_ + "/sendMessage";
-    const auto post_fields = "chat_id=" + *escaped_chat_id + "&text=" + *escaped_text;
+    const auto post_fields =
+        "chat_id=" + *escaped_chat_id + "&text=" + *escaped_text;
     if (!configure(url, post_fields)) {
         return BotError::Initialization;
     }
@@ -119,22 +137,28 @@ BotError BotClient::send(const std::string& message) const {
     }
 
     auto http_code = 0L;
-    if (curl_easy_getinfo(curl_.get(), CURLINFO_RESPONSE_CODE, &http_code) != CURLE_OK) {
-        return BotError::Unknown;  
+    if (curl_easy_getinfo(curl_.get(), CURLINFO_RESPONSE_CODE, &http_code) !=
+        CURLE_OK) {
+        return BotError::Unknown;
     }
     return classify(CURLE_OK, http_code);
 }
 
-bool BotClient::configure(const std::string& url, const std::string& body) const {
+bool BotClient::configure(const std::string& url,
+                          const std::string& body) const {
     CURL* curl = curl_.get();
-    return curl_easy_setopt(curl, CURLOPT_URL, url.c_str()) == CURLE_OK
-        && curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str()) == CURLE_OK
-        && curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE,
-                            static_cast<curl_off_t>(body.size())) == CURLE_OK
-        && curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, kConnectTimeoutSeconds) == CURLE_OK
-        && curl_easy_setopt(curl, CURLOPT_TIMEOUT, kTotalTimeoutSeconds) == CURLE_OK
-        && curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L) == CURLE_OK
-        && curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_body) == CURLE_OK;
+    return curl_easy_setopt(curl, CURLOPT_URL, url.c_str()) == CURLE_OK &&
+           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str()) ==
+               CURLE_OK &&
+           curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE,
+                            static_cast<curl_off_t>(body.size())) == CURLE_OK &&
+           curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT,
+                            kConnectTimeoutSeconds) == CURLE_OK &&
+           curl_easy_setopt(curl, CURLOPT_TIMEOUT, kTotalTimeoutSeconds) ==
+               CURLE_OK &&
+           curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L) == CURLE_OK &&
+           curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_body) ==
+               CURLE_OK;
 }
 
-}
+}  // namespace tg
