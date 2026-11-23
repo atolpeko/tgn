@@ -1,0 +1,4 @@
+#pragma once
+
+// Generated from project(VERSION) by CMake
+constexpr const char* kTgnVersion = "@PROJECT_VERSION@";

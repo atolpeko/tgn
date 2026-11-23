@@ -8,7 +8,7 @@ project(tgn
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)   
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release)
@@ -20,11 +20,22 @@ message(STATUS "Found CURL: ${CURL_LIBRARIES} (version \"${CURL_VERSION_STRING}\
 find_package(CLI11 REQUIRED)
 message(STATUS "Found CLI11: ${CLI11_DIR} (version \"${CLI11_VERSION}\")")
 
-set(SOURCES 
+set(SOURCES
     src/main.cpp
-)   
+    src/cli.cpp
+)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
+
+# The version shown by --version 
+configure_file(src/version.hpp.in
+               ${CMAKE_CURRENT_BINARY_DIR}/tgn_version.hpp
+               @ONLY)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+  ${CMAKE_CURRENT_BINARY_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
   CURL::libcurl
