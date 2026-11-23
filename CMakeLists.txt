@@ -23,11 +23,12 @@ message(STATUS "Found CLI11: ${CLI11_DIR} (version \"${CLI11_VERSION}\")")
 set(SOURCES
     src/main.cpp
     src/cli.cpp
+    src/telegram.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-# The version shown by --version 
+# The version shown by --version follows project(VERSION);
 configure_file(src/version.hpp.in
                ${CMAKE_CURRENT_BINARY_DIR}/tgn_version.hpp
                @ONLY)
