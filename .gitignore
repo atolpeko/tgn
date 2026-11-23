@@ -1,0 +1,86 @@
+# Build directories
+build/
+out/
+bin/
+obj/
+cmake-build-*/
+
+# CMake generated
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+_deps/
+compile_commands.json
+install_manifest.txt
+Makefile
+
+# Compiled objects
+*.o
+*.obj
+*.lo
+*.slo
+
+# Precompiled headers
+*.gch
+*.pch
+
+# Libraries
+*.a
+*.lib
+*.la
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug symbols and debugger files
+*.pdb
+*.ilk
+*.dSYM/
+.gdb_history
+
+# Dependency and build-system artifacts
+*.d
+*.log
+*.tlog
+Makefile.in
+.ninja_deps
+.ninja_log
+
+# Profiling / coverage
+*.gcda
+*.gcno
+*.gcov
+gmon.out
+*.profraw
+
+# Package managers
+vcpkg_installed/
+conan/
+.conan/
+CMakeUserPresets.json
+
+# IDEs and editors
+.vscode/
+.idea/
+.vs/
+*.swp
+*~
+*.user
+*.suo
+*.sln.docklock
+*.vcxproj.user
+*.code-workspace
+.cache/
+.clangd/
+
+# OS files
+.DS_Store
+Thumbs.db
