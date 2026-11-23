@@ -16,6 +16,9 @@ compile_commands.json
 install_manifest.txt
 Makefile
 
+# Generated from src/version.hpp.in by configure_file
+tgn_version.hpp
+
 # Compiled objects
 *.o
 *.obj
