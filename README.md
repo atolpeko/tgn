@@ -1,6 +1,6 @@
 # tgn
 
-A small Telegram notification tool.
+A Telegram notification tool.
 
 ## Requirements
 
