@@ -53,9 +53,8 @@ std::variant<Args, ParseResult> parse_args(int argc, char** argv) {
         reset_empty(out);
     } catch (const CLI::ParseError& e) {
         // CLI11 reports help/version/usage errors by throwing
-        return app.exit(e) == 0 
-            ? ParseResult::ExitSuccess 
-            : ParseResult::ExitFailure;
+        return app.exit(e) == 0 ? ParseResult::ExitSuccess
+                                : ParseResult::ExitFailure;
     }
 
     return out;

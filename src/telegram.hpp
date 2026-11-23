@@ -7,9 +7,11 @@
 namespace tg {
 
 // Telegram's limit for the text of one message, in UTF-16 code units.
-inline constexpr std::size_t kMaxMessageLength = 4096;    
+inline constexpr std::size_t kMaxMessageLength = 4096;
 
-struct CurlDeleter { void operator()(void* handle) const noexcept; };
+struct CurlDeleter {
+    void operator()(void* handle) const noexcept;
+};
 
 enum class BotError {
     None,
@@ -41,7 +43,7 @@ public:
 private:
     bool configure(const std::string& url, const std::string& body);
 
-    std::unique_ptr<void, CurlDeleter> curl_;  
+    std::unique_ptr<void, CurlDeleter> curl_;
     std::string token_;
     std::string chat_id_;
 };

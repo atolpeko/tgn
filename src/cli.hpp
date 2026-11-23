@@ -1,8 +1,8 @@
 #pragma once
 
 #include <optional>
-#include <variant>
 #include <string>
+#include <variant>
 
 namespace cli {
 

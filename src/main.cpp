@@ -85,10 +85,10 @@ int main(int argc, char** argv) {
     });
 
     auto args_res = cli::parse_args(argc, argv);
-    if (auto result = std::get_if<cli::ParseResult>(&args_res); result) 
+    if (auto result = std::get_if<cli::ParseResult>(&args_res); result)
         return *result == cli::ParseResult::ExitSuccess
-            ? tgn::to_int(cli::ExitCode::Ok)
-            : tgn::to_int(cli::ExitCode::Usage);
+                   ? tgn::to_int(cli::ExitCode::Ok)
+                   : tgn::to_int(cli::ExitCode::Usage);
 
     auto& args = std::get<cli::Args>(args_res);
     if (!tgn::validate_args(args))
@@ -98,8 +98,7 @@ int main(int argc, char** argv) {
     if (!message)
         return tgn::to_int(cli::ExitCode::Usage);
 
-    tg::BotClient client(std::move(*args.bot_token),
-                         std::move(*args.chat_id));
+    tg::BotClient client(std::move(*args.bot_token), std::move(*args.chat_id));
     tg::BotError error = client.send(*message);
     if (error != tg::BotError::None) {
         std::cerr << "tgn: failed to send message: " << error << '\n';

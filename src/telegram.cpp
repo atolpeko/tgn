@@ -1,16 +1,20 @@
 #include "telegram.hpp"
 
+#include <curl/curl.h>
+
+#include <cstddef>
 #include <limits>
 #include <optional>
-#include <cstddef>
-#include <curl/curl.h>
 
 namespace {
 
 class CurlGlobal {
 public:
     CurlGlobal() : ok_(curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK) {}
-    ~CurlGlobal() { if (ok_) curl_global_cleanup(); }
+    ~CurlGlobal() {
+        if (ok_)
+            curl_global_cleanup();
+    }
 
     CurlGlobal(const CurlGlobal&) = delete;
     CurlGlobal& operator=(const CurlGlobal&) = delete;
@@ -150,8 +154,7 @@ BotError BotClient::send(const std::string& message) {
     return classify(CURLE_OK, http_code);
 }
 
-bool BotClient::configure(const std::string& url,
-                          const std::string& body) {
+bool BotClient::configure(const std::string& url, const std::string& body) {
     CURL* curl = curl_.get();
     return curl_easy_setopt(curl, CURLOPT_URL, url.c_str()) == CURLE_OK &&
            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str()) ==
