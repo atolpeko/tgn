@@ -6,7 +6,7 @@ A small Telegram notification tool.
 
 - CMake ≥ 3.16 and a C++17 compiler (GCC and Clang), Make or Ninja.
 - libcurl with headers.
-- CLI11 ≥ 2.7 (older versions build, but report CLI11's own exit status for usage errors).
+- CLI11.
 
 ```bash
 sudo dnf install gcc-c++ cmake libcurl-devel cli11-devel       # Fedora/RHEL

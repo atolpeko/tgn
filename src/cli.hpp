@@ -1,12 +1,15 @@
 #pragma once
 
 #include <optional>
+#include <variant>
 #include <string>
 
+namespace cli {
+
 struct Args {
-    std::optional<std::string> bot_token;// nullopt => not supplied (env/cli)
-    std::optional<std::string> chat_id;  // nullopt => not supplied (env/cli)
-    std::optional<std::string> message;  // nullopt or "-" => read stdin
+    std::optional<std::string> bot_token;  // nullopt => not supplied (env/cli)
+    std::optional<std::string> chat_id;    // nullopt => not supplied (env/cli)
+    std::optional<std::string> message;    // nullopt or "-" => read stdin
 };
 
 enum class ExitCode : int {
@@ -17,9 +20,10 @@ enum class ExitCode : int {
 };
 
 enum class ParseResult {
-    Continue,
     ExitSuccess,  // -- help or --version
     ExitFailure,
 };
 
-[[nodiscard]] ParseResult parse_args(int argc, char** argv, Args& out);
+[[nodiscard]] std::variant<Args, ParseResult> parse_args(int argc, char** argv);
+
+}  // namespace cli

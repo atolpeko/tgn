@@ -1,12 +1,15 @@
 #pragma once
 
-#include <curl/curl.h>
-
 #include <memory>
 #include <ostream>
 #include <string>
 
 namespace tg {
+
+// Telegram's limit for the text of one message, in UTF-16 code units.
+inline constexpr std::size_t kMaxMessageLength = 4096;    
+
+struct CurlDeleter { void operator()(void* handle) const noexcept; };
 
 enum class BotError {
     None,
@@ -33,12 +36,12 @@ public:
     BotClient(BotClient&&) noexcept = default;
     BotClient& operator=(BotClient&&) noexcept = default;
 
-    [[nodiscard]] BotError send(const std::string& message) const;
+    [[nodiscard]] BotError send(const std::string& message);
 
 private:
-    bool configure(const std::string& url, const std::string& body) const;
+    bool configure(const std::string& url, const std::string& body);
 
-    std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl_;
+    std::unique_ptr<void, CurlDeleter> curl_;  
     std::string token_;
     std::string chat_id_;
 };

@@ -6,7 +6,7 @@
 
 namespace {
 
-void define_args(CLI::App& app, Args& out) {
+void define_args(CLI::App& app, cli::Args& out) {
     app.usage("USAGE:\ntgn [options] <message>\n<command> | tgn [options]");
     app.footer(
         "Use '--' before a message that starts with '-'.\n"
@@ -28,7 +28,7 @@ void define_args(CLI::App& app, Args& out) {
     app.set_version_flag("-V,--version", std::string("tgn ") + kTgnVersion);
 }
 
-void reset_empty(Args& args) {
+void reset_empty(cli::Args& args) {
     if (args.bot_token && args.bot_token->empty()) {
         args.bot_token.reset();
     }
@@ -42,7 +42,10 @@ void reset_empty(Args& args) {
 
 }  // namespace
 
-ParseResult parse_args(int argc, char** argv, Args& out) {
+namespace cli {
+
+std::variant<Args, ParseResult> parse_args(int argc, char** argv) {
+    Args out;
     CLI::App app{"Send a Telegram notification."};
     try {
         define_args(app, out);
@@ -50,9 +53,12 @@ ParseResult parse_args(int argc, char** argv, Args& out) {
         reset_empty(out);
     } catch (const CLI::ParseError& e) {
         // CLI11 reports help/version/usage errors by throwing
-        return app.exit(e) == 0 ? ParseResult::ExitSuccess
-                                : ParseResult::ExitFailure;
+        return app.exit(e) == 0 
+            ? ParseResult::ExitSuccess 
+            : ParseResult::ExitFailure;
     }
 
-    return ParseResult::Continue;
+    return out;
 }
+
+}  // namespace cli

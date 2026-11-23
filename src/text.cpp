@@ -1,5 +1,7 @@
 #include "text.hpp"
 
+namespace text {
+
 std::size_t utf16_length(const std::string& utf8) noexcept {
     std::size_t units = 0;
     for (std::size_t i = 0; i < utf8.size();) {
@@ -24,3 +26,5 @@ void trim_trailing_newlines(std::string& text) noexcept {
         text.pop_back();
     }
 }
+
+}  // namespace text

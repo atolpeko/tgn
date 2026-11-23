@@ -2,13 +2,15 @@
 
 #include <limits>
 #include <optional>
+#include <cstddef>
+#include <curl/curl.h>
 
 namespace {
 
 class CurlGlobal {
 public:
     CurlGlobal() : ok_(curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK) {}
-    ~CurlGlobal() { curl_global_cleanup(); }
+    ~CurlGlobal() { if (ok_) curl_global_cleanup(); }
 
     CurlGlobal(const CurlGlobal&) = delete;
     CurlGlobal& operator=(const CurlGlobal&) = delete;
@@ -79,6 +81,10 @@ tg::BotError classify(CURLcode rc, long http_code) noexcept {
 
 namespace tg {
 
+void tg::CurlDeleter::operator()(void* handle) const noexcept {
+    curl_easy_cleanup(static_cast<CURL*>(handle));
+}
+
 std::ostream& operator<<(std::ostream& os, BotError e) {
     switch (e) {
         case BotError::None:
@@ -109,11 +115,11 @@ std::ostream& operator<<(std::ostream& os, BotError e) {
 }
 
 BotClient::BotClient(std::string token, std::string chat_id)
-    : curl_(curl_init(), &curl_easy_cleanup),
+    : curl_(curl_init()),
       token_(std::move(token)),
       chat_id_(std::move(chat_id)) {}
 
-BotError BotClient::send(const std::string& message) const {
+BotError BotClient::send(const std::string& message) {
     if (!curl_) {
         return BotError::Initialization;
     }
@@ -145,7 +151,7 @@ BotError BotClient::send(const std::string& message) const {
 }
 
 bool BotClient::configure(const std::string& url,
-                          const std::string& body) const {
+                          const std::string& body) {
     CURL* curl = curl_.get();
     return curl_easy_setopt(curl, CURLOPT_URL, url.c_str()) == CURLE_OK &&
            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str()) ==

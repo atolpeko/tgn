@@ -18,8 +18,10 @@
 #include "telegram.hpp"
 #include "text.hpp"
 
+namespace tgn {
+
 // True when stdin is a terminal
-bool stdin_is_tty() {
+bool stdin_is_tty() noexcept {
 #ifdef _WIN32
     return _isatty(_fileno(stdin)) != 0;
 #else
@@ -27,7 +29,7 @@ bool stdin_is_tty() {
 #endif
 }
 
-bool validate_args(const Args& args) {
+bool validate_args(const cli::Args& args) noexcept {
     if (args.bot_token && args.chat_id) {
         return true;
     }
@@ -39,14 +41,14 @@ bool validate_args(const Args& args) {
 std::string read_stdin() {
     std::string text{std::istreambuf_iterator<char>(std::cin),
                      std::istreambuf_iterator<char>()};
-    trim_trailing_newlines(text);
+    text::trim_trailing_newlines(text);
     return text;
 }
 
-std::optional<std::string> resolve_message(const Args& args) {
+std::optional<std::string> resolve_message(cli::Args& args) {
     std::string text;
     if (args.message && *args.message != "-") {
-        text = *args.message;
+        text = std::move(*args.message);
     } else {
         if (!args.message && stdin_is_tty()) {
             std::cerr << "tgn: missing message text (use -h for help)\n";
@@ -59,10 +61,10 @@ std::optional<std::string> resolve_message(const Args& args) {
         }
     }
 
-    const auto units = utf16_length(text);
-    if (units > kMaxMessageLength) {
+    const auto units = text::utf16_length(text);
+    if (units > tg::kMaxMessageLength) {
         std::cerr << "tgn: message is too long (" << units
-                  << " characters, Telegram allows " << kMaxMessageLength
+                  << " characters, Telegram allows " << tg::kMaxMessageLength
                   << ")\n";
         return std::nullopt;
     }
@@ -70,9 +72,11 @@ std::optional<std::string> resolve_message(const Args& args) {
     return std::make_optional(std::move(text));
 }
 
-[[noreturn]] void exit_with(ExitCode code) {
-    std::exit(static_cast<int>(code));
+constexpr int to_int(cli::ExitCode code) noexcept {
+    return static_cast<int>(code);
 }
+
+}  // namespace tgn
 
 int main(int argc, char** argv) {
     std::set_new_handler([] {
@@ -80,28 +84,27 @@ int main(int argc, char** argv) {
         std::abort();
     });
 
-    Args args;
-    switch (parse_args(argc, argv, args)) {
-        case ParseResult::Continue:
-            break;
-        case ParseResult::ExitSuccess:
-            exit_with(ExitCode::Ok);
-        case ParseResult::ExitFailure:
-            exit_with(ExitCode::Usage);
-    }
-    if (!validate_args(args))
-        exit_with(ExitCode::Config);
+    auto args_res = cli::parse_args(argc, argv);
+    if (auto result = std::get_if<cli::ParseResult>(&args_res); result) 
+        return *result == cli::ParseResult::ExitSuccess
+            ? tgn::to_int(cli::ExitCode::Ok)
+            : tgn::to_int(cli::ExitCode::Usage);
 
-    std::optional<std::string> message = resolve_message(args);
+    auto& args = std::get<cli::Args>(args_res);
+    if (!tgn::validate_args(args))
+        return tgn::to_int(cli::ExitCode::Config);
+
+    std::optional<std::string> message = tgn::resolve_message(args);
     if (!message)
-        exit_with(ExitCode::Usage);
+        return tgn::to_int(cli::ExitCode::Usage);
 
-    tg::BotClient client(*args.bot_token, *args.chat_id);
+    tg::BotClient client(std::move(*args.bot_token),
+                         std::move(*args.chat_id));
     tg::BotError error = client.send(*message);
     if (error != tg::BotError::None) {
         std::cerr << "tgn: failed to send message: " << error << '\n';
-        exit_with(ExitCode::Network);
+        return tgn::to_int(cli::ExitCode::Network);
     }
 
-    exit_with(ExitCode::Ok);
+    return tgn::to_int(cli::ExitCode::Ok);
 }
