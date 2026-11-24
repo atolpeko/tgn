@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
@@ -8,13 +10,6 @@
 #include <string>
 #include <utility>
 #include <variant>
-
-#ifdef _WIN32
-#include <fcntl.h>
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
 
 #include "cli.hpp"
 #include "limits.hpp"
@@ -62,11 +57,7 @@ void report_send_failure(const tg::SendFailure& failure) {
 
 // True when stdin is a terminal
 bool stdin_is_tty() noexcept {
-#ifdef _WIN32
-    return _isatty(_fileno(stdin)) != 0;
-#else
     return isatty(STDIN_FILENO) != 0;
-#endif
 }
 
 void report_too_long(std::optional<std::size_t> units) {
@@ -77,10 +68,6 @@ void report_too_long(std::optional<std::size_t> units) {
 }
 
 std::optional<std::string> read_stdin() {
-#ifdef _WIN32
-    _setmode(_fileno(stdin), _O_BINARY);  // keep piped text byte-exact
-#endif
-
     std::string text;
     text.reserve(kMaxInputBytes);
 
