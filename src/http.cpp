@@ -81,10 +81,9 @@ bool configure(CURL* curl, const std::string& url, std::string_view body,
 
 std::string detail_from_buffer(const char* error_buffer) {
     std::string detail = error_buffer;
-    while (!detail.empty() &&
-           (detail.back() == '\n' || detail.back() == '\r')) {
+    while (!detail.empty() && (detail.back() == '\n' || detail.back() == '\r'))
         detail.pop_back();
-    }
+
     return detail;
 }
 
@@ -107,16 +106,13 @@ struct Escaped {
 };
 
 std::optional<Escaped> form_escape(CURL* curl, std::string_view text) {
-    if (text.size() >
-        static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+    if (text.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
         return std::nullopt;  // libcurl takes an int length
-    }
 
     char* escaped = curl_easy_escape(curl, text.empty() ? "" : text.data(),
                                      static_cast<int>(text.size()));
-    if (escaped == nullptr) {
+    if (escaped == nullptr)
         return std::nullopt;
-    }
 
     return Escaped{std::unique_ptr<char, CurlFree>{escaped},
                    std::strlen(escaped)};
@@ -131,9 +127,8 @@ bool is_unreserved(char c) noexcept {
 // The length of `text` once curl_easy_escape has encoded it.
 std::size_t encoded_length(std::string_view text) noexcept {
     std::size_t total = 0;
-    for (const char c : text) {
+    for (const char c : text)
         total += is_unreserved(c) ? std::size_t{1} : std::size_t{3};
-    }
     return total;
 }
 
@@ -151,9 +146,9 @@ bool append_form_value(CURL* curl, std::string& out, std::string_view text) {
     }
 
     const auto escaped = form_escape(curl, text);
-    if (!escaped) {
+    if (!escaped)
         return false;
-    }
+
     out.append(escaped->view());
     return true;
 }
@@ -162,30 +157,27 @@ bool append_form_value(CURL* curl, std::string& out, std::string_view text) {
 std::optional<std::string> form_body(CURL* curl,
                                      std::initializer_list<FormField> fields) {
     std::size_t size = 0;
-    for (const auto& field : fields) {
+    for (const auto& field : fields)
         size += encoded_length(field.first) + 1 + encoded_length(field.second);
-    }
-    if (fields.size() > 1) {
+
+    if (fields.size() > 1)
         size += fields.size() - 1;  // the '&' separators
-    }
 
     std::string body;
     body.reserve(size);
 
     bool first = true;
     for (const auto& field : fields) {
-        if (!first) {
+        if (!first)
             body.push_back('&');
-        }
         first = false;
 
-        if (!append_form_value(curl, body, field.first)) {
+        if (!append_form_value(curl, body, field.first))
             return std::nullopt;
-        }
+
         body.push_back('=');
-        if (!append_form_value(curl, body, field.second)) {
+        if (!append_form_value(curl, body, field.second))
             return std::nullopt;
-        }
     }
 
     return body;
@@ -201,33 +193,28 @@ Client::Client(Config config) : curl_(curl_init()), config_(config) {}
 
 Result Client::post(const std::string& url, std::string_view body) {
     CURL* const curl = raw(curl_.get());
-    if (curl == nullptr) {
+    if (curl == nullptr)
         return Result{
             Error::Initialization, {}, "the libcurl handle is unavailable"};
-    }
 
     Result result;
     Sink sink{&result.response.body, config_.max_response_bytes};
     char error_buffer[CURL_ERROR_SIZE] = {};
-    if (!configure(curl, url, body, &sink, error_buffer, config_)) {
+    if (!configure(curl, url, body, &sink, error_buffer, config_))
         return Result{
             Error::Initialization, {}, "could not configure the request"};
-    }
 
     const CURLcode perform = curl_easy_perform(curl);
     if (perform != CURLE_OK) {
         std::string detail = detail_from_buffer(error_buffer);
-        if (detail.empty()) {
+        if (detail.empty())
             detail = curl_easy_strerror(perform);
-        }
         return Result{error_for(perform), {}, std::move(detail)};
     }
 
     auto http_code = 0L;
-    if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code) !=
-        CURLE_OK) {
+    if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code) != CURLE_OK)
         return Result{Error::Unknown, {}, "libcurl reported no HTTP status"};
-    }
 
     result.response.status = http_code;
     return result;
@@ -236,15 +223,13 @@ Result Client::post(const std::string& url, std::string_view body) {
 Result Client::post_form(const std::string& url,
                          std::initializer_list<FormField> fields) {
     CURL* const curl = raw(curl_.get());
-    if (curl == nullptr) {
+    if (curl == nullptr)
         return Result{
             Error::Initialization, {}, "the libcurl handle is unavailable"};
-    }
 
     const auto body = form_body(curl, fields);
-    if (!body) {
+    if (!body)
         return Result{Error::Encoding, {}, "could not encode the request"};
-    }
 
     return post(url, *body);
 }

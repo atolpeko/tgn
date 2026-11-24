@@ -45,7 +45,7 @@ void handle_empty(const CLI::App& app, Args& args) {
 
 }  // namespace
 
-std::variant<Args, ParseResult> parse_args(int argc, char** argv) {
+std::variant<Args, Exit> parse_args(int argc, char** argv) {
     Args args;
     CLI::App app{"Send a Telegram notification."};
     try {
@@ -54,8 +54,7 @@ std::variant<Args, ParseResult> parse_args(int argc, char** argv) {
         handle_empty(app, args);
     } catch (const CLI::ParseError& e) {
         // CLI11 reports help/version/usage errors by throwing
-        return app.exit(e) == 0 ? ParseResult::ExitSuccess
-                                : ParseResult::ExitFailure;
+        return app.exit(e) == 0 ? Exit::Success : Exit::Failure;
     }
 
     return args;

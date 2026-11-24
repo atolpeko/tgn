@@ -12,18 +12,11 @@ struct Args {
     std::optional<std::string> message;    // nullopt or "-" => read stdin
 };
 
-enum class ExitCode : int {
-    Ok = 0,
-    Usage = 1,
-    Config = 2,
-    Network = 3,
+enum class Exit {
+    Success,  // -- help or --version
+    Failure,
 };
 
-enum class ParseResult {
-    ExitSuccess,  // -- help or --version
-    ExitFailure,
-};
-
-[[nodiscard]] std::variant<Args, ParseResult> parse_args(int argc, char** argv);
+[[nodiscard]] std::variant<Args, Exit> parse_args(int argc, char** argv);
 
 }  // namespace cli

@@ -27,21 +27,16 @@ bool is_space(char c) noexcept {
 }
 
 void skip_space(std::string_view json, std::size_t& i) noexcept {
-    while (i < json.size() && is_space(json[i])) {
-        ++i;
-    }
+    while (i < json.size() && is_space(json[i])) ++i;
 }
 
 int hex_value(char c) noexcept {
-    if (c >= '0' && c <= '9') {
+    if (c >= '0' && c <= '9')
         return c - '0';
-    }
-    if (c >= 'a' && c <= 'f') {
+    if (c >= 'a' && c <= 'f')
         return c - 'a' + 10;
-    }
-    if (c >= 'A' && c <= 'F') {
+    if (c >= 'A' && c <= 'F')
         return c - 'A' + 10;
-    }
     return -1;
 }
 
@@ -68,13 +63,11 @@ std::uint32_t read_hex4(std::string_view json, std::size_t& i) noexcept {
 
     std::uint32_t value = 0;
     for (int digit = 0; digit < 4; ++digit, ++i) {
-        if (i >= json.size()) {
+        if (i >= json.size())
             return kReplacement;
-        }
         const int hex = hex_value(json[i]);
-        if (hex < 0) {
+        if (hex < 0)
             return kReplacement;
-        }
         value = (value << 4) | static_cast<std::uint32_t>(hex);
     }
     return value;
@@ -82,9 +75,8 @@ std::uint32_t read_hex4(std::string_view json, std::size_t& i) noexcept {
 
 std::string read_json_string(std::string_view json, std::size_t& i) {
     std::string out;
-    if (i >= json.size() || json[i] != '"') {
+    if (i >= json.size() || json[i] != '"')
         return out;
-    }
     ++i;
 
     while (i < json.size()) {
@@ -100,9 +92,9 @@ std::string read_json_string(std::string_view json, std::size_t& i) {
         }
 
         ++i;  // consume the backslash
-        if (i >= json.size()) {
+        if (i >= json.size())
             break;
-        }
+
         const char escape = json[i];
         ++i;
 
@@ -168,9 +160,8 @@ long read_json_int(std::string_view json, std::size_t& i) noexcept {
         }
         ++i;
     }
-    if (value > kMaxValue) {
+    if (value > kMaxValue)
         value = kMaxValue;
-    }
     return negative ? -value : value;
 }
 
@@ -297,15 +288,13 @@ BotClient::BotClient(std::string token, std::string chat_id)
 std::optional<SendFailure> BotClient::send(std::string_view message) {
     auto result =
         http_.post_form(endpoint_, {{"chat_id", chat_id_}, {"text", message}});
-    if (!result.ok()) {
+    if (!result.ok())
         return SendFailure{to_bot_error(result.error),
                            std::move(result.detail)};
-    }
 
     const auto error_status = classify(result.response.status);
-    if (!error_status) {
+    if (!error_status)
         return std::nullopt;
-    }
 
     SendFailure failure{*error_status, {}};
     parse_error_fields(result.response.body, failure);
