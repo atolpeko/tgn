@@ -15,6 +15,13 @@ constexpr std::string_view kApiPrefix = "https://api.telegram.org/bot";
 constexpr std::string_view kSendMessage = "/sendMessage";
 constexpr std::size_t kMaxDescriptionChars = 300;
 
+std::string make_endpoint(std::string_view token) {
+    std::string url;
+    url.reserve(kApiPrefix.size() + token.size() + kSendMessage.size());
+    url.append(kApiPrefix).append(token).append(kSendMessage);
+    return url;
+}
+
 bool is_space(char c) noexcept {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
@@ -285,15 +292,11 @@ std::ostream& operator<<(std::ostream& os, BotError e) {
 }
 
 BotClient::BotClient(std::string token, std::string chat_id)
-    : token_(std::move(token)), chat_id_(std::move(chat_id)) {}
+    : chat_id_(std::move(chat_id)), endpoint_(make_endpoint(token)) {}
 
 std::optional<SendFailure> BotClient::send(std::string_view message) {
-    std::string url;
-    url.reserve(kApiPrefix.size() + token_.size() + kSendMessage.size());
-    url.append(kApiPrefix).append(token_).append(kSendMessage);
-
     auto result =
-        http_.post_form(url, {{"chat_id", chat_id_}, {"text", message}});
+        http_.post_form(endpoint_, {{"chat_id", chat_id_}, {"text", message}});
     if (!result.ok()) {
         return SendFailure{to_bot_error(result.error),
                            std::move(result.detail)};

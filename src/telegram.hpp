@@ -44,8 +44,8 @@ public:
 
 private:
     http::Client http_;
-    std::string token_;
     std::string chat_id_;
+    std::string endpoint_; 
 };
 
 }  // namespace tg
