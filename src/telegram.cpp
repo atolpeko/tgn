@@ -5,8 +5,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
+#include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -31,13 +34,18 @@ private:
     bool ok_;
 };
 
-CURL* curl_init() {
+CurlHandle* curl_init() {
     static CurlGlobal guard;
-    return guard.ok() ? curl_easy_init() : nullptr;
+    return guard.ok() ? static_cast<CurlHandle*>(curl_easy_init()) : nullptr;
 }
 
 constexpr long kConnectTimeoutSeconds = 10;
 constexpr long kTotalTimeoutSeconds = 30;
+
+constexpr std::string_view kApiPrefix = "https://api.telegram.org/bot";
+constexpr std::string_view kSendMessage = "/sendMessage";
+constexpr std::string_view kChatField = "chat_id=";
+constexpr std::string_view kTextField = "&text=";
 constexpr std::size_t kMaxResponseBytes = 8 * 1024;
 constexpr std::size_t kMaxDescriptionChars = 300;
 
@@ -47,7 +55,7 @@ std::size_t collect_body(char* data, std::size_t size, std::size_t nmemb,
     const std::size_t bytes = size * nmemb;
     const std::size_t room = kMaxResponseBytes - body->size();
     body->append(data, std::min(bytes, room));
-    return bytes;  
+    return bytes;
 }
 
 bool is_space(char c) noexcept {
@@ -250,23 +258,43 @@ void parse_error_fields(std::string_view body, SendFailure& failure) {
     }
 }
 
-std::optional<std::string> form_escape(CURL* curl, const std::string& text) {
+struct CurlFree {
+    void operator()(char* data) const noexcept { curl_free(data); }
+};
+
+// Owns the percent-encoded string libcurl allocated; nothing is copied.
+struct Escaped {
+    std::unique_ptr<char, CurlFree> data;
+    std::size_t size = 0;
+
+    [[nodiscard]] std::string_view view() const noexcept {
+        return {data.get(), size};
+    }
+};
+
+CURL* raw(CurlHandle* handle) noexcept {
+    return reinterpret_cast<CURL*>(handle);  
+}
+
+std::optional<Escaped> form_escape(CURL* curl, std::string_view text) {
     if (text.size() >
         static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         return std::nullopt;  // libcurl takes an int length
     }
 
-    char* escaped =
-        curl_easy_escape(curl, text.c_str(), static_cast<int>(text.size()));
+    char* escaped = curl_easy_escape(curl, text.empty() ? "" : text.data(),
+                                     static_cast<int>(text.size()));
     if (escaped == nullptr) {
         return std::nullopt;
     }
 
-    std::string encoded{escaped};
-    curl_free(escaped);
-    return encoded;
+    return Escaped{std::unique_ptr<char, CurlFree>{escaped},
+                   std::strlen(escaped)};
 }
 
+// CURLOPT_POSTFIELDS keeps the pointer, so `body` must outlive
+// curl_easy_perform; CURLOPT_COPYPOSTFIELDS would hide that requirement by
+// copying the whole body.
 bool configure(CURL* curl, const std::string& url, const std::string& body,
                std::string* response, char* error_buffer) {
     return curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer) ==
@@ -324,8 +352,8 @@ std::optional<tg::BotError> classify(CURLcode rc, long http_code) noexcept {
 
 }  // namespace
 
-void tg::CurlDeleter::operator()(void* handle) const noexcept {
-    curl_easy_cleanup(static_cast<CURL*>(handle));
+void CurlDeleter::operator()(CurlHandle* handle) const noexcept {
+    curl_easy_cleanup(raw(handle));
 }
 
 std::ostream& operator<<(std::ostream& os, BotError e) {
@@ -363,29 +391,38 @@ BotClient::BotClient(std::string token, std::string chat_id)
       chat_id_(std::move(chat_id)) {}
 
 std::optional<SendFailure> BotClient::send(const std::string& message) {
-    if (!curl_) {
+    CURL* const curl = raw(curl_.get());
+    if (curl == nullptr) {
         return SendFailure{BotError::Initialization,
                            "the libcurl handle is unavailable"};
     }
 
-    const auto escaped_chat_id = form_escape(curl_.get(), chat_id_);
-    const auto escaped_text = form_escape(curl_.get(), message);
+    const auto escaped_chat_id = form_escape(curl, chat_id_);
+    const auto escaped_text = form_escape(curl, message);
     if (!escaped_chat_id || !escaped_text) {
         return SendFailure{BotError::Encoding, "could not encode the request"};
     }
 
-    const auto url = "https://api.telegram.org/bot" + token_ + "/sendMessage";
-    const auto post_fields =
-        "chat_id=" + *escaped_chat_id + "&text=" + *escaped_text;
+    std::string url;
+    url.reserve(kApiPrefix.size() + token_.size() + kSendMessage.size());
+    url.append(kApiPrefix).append(token_).append(kSendMessage);
+
+    std::string body;
+    body.reserve(kChatField.size() + escaped_chat_id->view().size() +
+                 kTextField.size() + escaped_text->view().size());
+    body.append(kChatField)
+        .append(escaped_chat_id->view())
+        .append(kTextField)
+        .append(escaped_text->view());
 
     std::string response;
     char error_buffer[CURL_ERROR_SIZE] = {};
-    if (!configure(curl_.get(), url, post_fields, &response, error_buffer)) {
+    if (!configure(curl, url, body, &response, error_buffer)) {
         return SendFailure{BotError::Initialization,
                            "could not configure the request"};
     }
 
-    const CURLcode perform = curl_easy_perform(curl_.get());
+    const CURLcode perform = curl_easy_perform(curl);
     if (perform != CURLE_OK) {
         std::string detail = detail_from_buffer(error_buffer);
         if (detail.empty()) {
@@ -396,7 +433,7 @@ std::optional<SendFailure> BotClient::send(const std::string& message) {
     }
 
     auto http_code = 0L;
-    if (curl_easy_getinfo(curl_.get(), CURLINFO_RESPONSE_CODE, &http_code) !=
+    if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code) !=
         CURLE_OK) {
         return SendFailure{BotError::Unknown,
                            "libcurl reported no HTTP status"};
@@ -404,7 +441,7 @@ std::optional<SendFailure> BotClient::send(const std::string& message) {
 
     const auto status = classify(CURLE_OK, http_code);
     if (!status) {
-        return std::nullopt;  
+        return std::nullopt;
     }
 
     SendFailure failure{*status, {}};

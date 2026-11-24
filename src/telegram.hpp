@@ -1,14 +1,16 @@
 #pragma once
 
+#include <iosfwd>
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <string>
 
 namespace tg {
 
+struct CurlHandle;
+
 struct CurlDeleter {
-    void operator()(void* handle) const noexcept;
+    void operator()(CurlHandle* handle) const noexcept;
 };
 
 enum class BotError {
@@ -45,7 +47,7 @@ public:
     [[nodiscard]] std::optional<SendFailure> send(const std::string& message);
 
 private:
-    std::unique_ptr<void, CurlDeleter> curl_;
+    std::unique_ptr<CurlHandle, CurlDeleter> curl_;
     std::string token_;
     std::string chat_id_;
 };
