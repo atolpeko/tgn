@@ -4,9 +4,11 @@ A Telegram notification tool.
 
 ## Requirements
 
-- CMake ≥ 3.16 and a C++17 compiler (GCC and Clang), Make or Ninja.
-- libcurl with headers.
-- CLI11.
+Linux or macOS, with:
+
+- CMake ≥ 3.21 and a C++17 compiler: GCC ≥ 11 or Clang ≥ 14.
+- libcurl ≥ 7.68 with headers.
+- CLI11 ≥ 2.1.
 
 ```bash
 sudo dnf install gcc-c++ cmake libcurl-devel cli11-devel       # Fedora/RHEL
@@ -20,6 +22,12 @@ brew install cmake curl cli11                                  # macOS
 cmake -S . -B build
 cmake --build build -j
 ./build/tgn --version
+```
+
+### Install
+
+```bash
+cmake --install build --prefix "$HOME/.local"
 ```
 
 ## Usage
