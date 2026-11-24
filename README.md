@@ -33,6 +33,11 @@ tgn [options] -- -          # read the message from stdin
 All text is UTF-8, the length limit is Telegram's: **4096 UTF-16
 code units**.
 
+The message comes from the positional argument, or from stdin when the
+argument is `-` or absent and stdin is not a terminal. Trailing newlines
+are stripped either way. An empty message, invalid UTF-8, or text over the
+limit is a usage error and nothing is sent.
+
 ### Options
 
 | Option | Environment | Meaning |
@@ -61,7 +66,7 @@ df -h / | tgn
 | Code | Meaning |
 | --- | --- |
 | 0 | message sent |
-| 1 | usage error: bad arguments, empty message, or message over the limit |
+| 1 | usage error: bad arguments, empty message, invalid UTF-8, or message over the limit |
 | 2 | missing bot token or chat ID |
 | 3 | the Telegram request failed (network, auth, rate limit, server) |
 

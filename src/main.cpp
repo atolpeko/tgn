@@ -1,14 +1,16 @@
+#include <algorithm>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <iterator>
 #include <new>
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 #ifdef _WIN32
+#include <fcntl.h>
 #include <io.h>
 #else
 #include <unistd.h>
@@ -16,9 +18,16 @@
 
 #include "cli.hpp"
 #include "telegram.hpp"
-#include "text.hpp"
+#include "limits.hpp"
 
 namespace tgn {
+namespace {
+
+constexpr std::size_t kMaxInputBytes = lim::kMaxMessageBytes + 1;
+
+constexpr int to_int(cli::ExitCode code) noexcept {
+    return static_cast<int>(code);
+}
 
 // True when stdin is a terminal
 bool stdin_is_tty() noexcept {
@@ -29,53 +38,93 @@ bool stdin_is_tty() noexcept {
 #endif
 }
 
-bool validate_args(const cli::Args& args) noexcept {
-    if (args.bot_token && args.chat_id) {
-        return true;
+void report_too_long(std::optional<std::size_t> units) {
+    std::cerr << "tgn: message is too long";
+    if (units) 
+        std::cerr << " (" << *units << " UTF-16 code units)";
+    std::cerr << ", Telegram allows " << lim::kMaxMessageLength << '\n';
+}
+
+std::optional<std::string> read_stdin() {
+#ifdef _WIN32
+    _setmode(_fileno(stdin), _O_BINARY);  // keep piped text byte-exact
+#endif
+
+    std::string text;
+    text.reserve(kMaxInputBytes);
+
+    char buffer[4096];
+    while (text.size() < kMaxInputBytes) {
+        const auto room = std::min(sizeof buffer, kMaxInputBytes - text.size());
+        std::cin.read(buffer, static_cast<std::streamsize>(room));
+        const auto got = static_cast<std::size_t>(std::cin.gcount());
+        text.append(buffer, got);
+        if (got == 0) 
+            break;
     }
+
+    if (!std::cin && !std::cin.eof()) 
+        return std::nullopt;
+
+    lim::trim_trailing_newlines(text);
+    return text;
+}
+
+bool credentials_present(const cli::Args& args) noexcept {
+    if (args.bot_token && args.chat_id) 
+        return true;
 
     std::cerr << "tgn: missing bot token or chat ID (use -h for help)\n";
     return false;
 }
 
-std::string read_stdin() {
-    std::string text{std::istreambuf_iterator<char>(std::cin),
-                     std::istreambuf_iterator<char>()};
-    text::trim_trailing_newlines(text);
-    return text;
-}
-
-std::optional<std::string> resolve_message(cli::Args& args) {
-    std::string text;
-    if (args.message && *args.message != "-") {
-        text = std::move(*args.message);
-    } else {
-        if (!args.message && stdin_is_tty()) {
-            std::cerr << "tgn: missing message text (use -h for help)\n";
-            return std::nullopt;
-        }
-        text = read_stdin();
-        if (text.empty()) {
-            std::cerr << "tgn: no message text on stdin (use -h for help)\n";
-            return std::nullopt;
-        }
+bool message_fits(const std::string& text) {
+    const auto units = lim::utf16_length(text);
+    if (!units) {
+        std::cerr << "tgn: message is not valid UTF-8\n";
+        return false;
+    }
+    if (*units > lim::kMaxMessageLength) {
+        report_too_long(*units);
+        return false;
     }
 
-    const auto units = text::utf16_length(text);
-    if (units > tg::kMaxMessageLength) {
-        std::cerr << "tgn: message is too long (" << units
-                  << " characters, Telegram allows " << tg::kMaxMessageLength
-                  << ")\n";
+    return true;
+}
+
+std::optional<std::string> take_message(cli::Args& args) {
+    if (args.message && *args.message != "-") {
+        std::string text = std::move(*args.message);
+        lim::trim_trailing_newlines(text);
+        if (text.empty()) {
+            std::cerr << "tgn: message is empty (use -h for help)\n";
+            return std::nullopt;
+        }
+        return text;
+    }
+
+    if (!args.message && stdin_is_tty()) {
+        std::cerr << "tgn: missing message text (use -h for help)\n";
         return std::nullopt;
     }
 
-    return std::make_optional(std::move(text));
+    auto text = read_stdin();
+    if (!text) {
+        std::cerr << "tgn: failed to read stdin\n";
+        return std::nullopt;
+    }
+    if (text->size() > lim::kMaxMessageBytes) {
+        report_too_long(std::nullopt);
+        return std::nullopt;
+    }
+    if (text->empty()) {
+        std::cerr << "tgn: no message text on stdin (use -h for help)\n";
+        return std::nullopt;
+    }
+    return text;
 }
 
-constexpr int to_int(cli::ExitCode code) noexcept {
-    return static_cast<int>(code);
-}
-
+}  // namespace
 }  // namespace tgn
 
 int main(int argc, char** argv) {
@@ -85,21 +134,24 @@ int main(int argc, char** argv) {
     });
 
     auto args_res = cli::parse_args(argc, argv);
-    if (auto result = std::get_if<cli::ParseResult>(&args_res); result)
-        return *result == cli::ParseResult::ExitSuccess
-                   ? tgn::to_int(cli::ExitCode::Ok)
-                   : tgn::to_int(cli::ExitCode::Usage);
-
+    if (const auto* result = std::get_if<cli::ParseResult>(&args_res)) {
+        return tgn::to_int(*result == cli::ParseResult::ExitSuccess
+                               ? cli::ExitCode::Ok
+                               : cli::ExitCode::Usage);
+    }
     auto& args = std::get<cli::Args>(args_res);
-    if (!tgn::validate_args(args))
-        return tgn::to_int(cli::ExitCode::Config);
 
-    std::optional<std::string> message = tgn::resolve_message(args);
-    if (!message)
+    std::optional<std::string> message = tgn::take_message(args);
+    if (!message || !tgn::message_fits(*message)) {
         return tgn::to_int(cli::ExitCode::Usage);
+    }
+
+    if (!tgn::credentials_present(args)) {
+        return tgn::to_int(cli::ExitCode::Config);
+    }
 
     tg::BotClient client(std::move(*args.bot_token), std::move(*args.chat_id));
-    tg::BotError error = client.send(*message);
+    const tg::BotError error = client.send(*message);
     if (error != tg::BotError::None) {
         std::cerr << "tgn: failed to send message: " << error << '\n';
         return tgn::to_int(cli::ExitCode::Network);

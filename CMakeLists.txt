@@ -23,7 +23,7 @@ message(STATUS "Found CLI11: ${CLI11_DIR} (version \"${CLI11_VERSION}\")")
 set(SOURCES
     src/main.cpp
     src/cli.cpp
-    src/text.cpp
+    src/limits.cpp
     src/telegram.cpp
 )
 

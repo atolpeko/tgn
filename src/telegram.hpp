@@ -6,9 +6,6 @@
 
 namespace tg {
 
-// Telegram's limit for the text of one message, in UTF-16 code units.
-inline constexpr std::size_t kMaxMessageLength = 4096;
-
 struct CurlDeleter {
     void operator()(void* handle) const noexcept;
 };

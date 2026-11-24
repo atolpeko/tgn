@@ -1,4 +1,8 @@
 #pragma once
 
+namespace cli {
+
 // Generated from project(VERSION) by CMake
 constexpr const char* kTgnVersion = "@PROJECT_VERSION@";
+
+}  // namespace cli
