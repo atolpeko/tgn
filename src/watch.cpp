@@ -53,9 +53,9 @@ std::string timeout_message(pid_t pid, long seconds) {
 int remaining_ms(const Deadline& deadline) noexcept {
     const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
         deadline.at - std::chrono::steady_clock::now());
-    if (left.count() <= 0) 
+    if (left.count() <= 0)
         return 0;
-    
+
     constexpr auto kMax = std::numeric_limits<int>::max();
     return left.count() > kMax ? kMax : static_cast<int>(left.count());
 }
