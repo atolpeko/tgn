@@ -1,6 +1,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -76,20 +77,21 @@ bool stdin_is_tty() noexcept {
 
 std::optional<std::string> read_stdin() {
     std::string text;
-    text.reserve(kMaxInputBytes);
 
     char buffer[4096];
     while (text.size() < kMaxInputBytes) {
         const auto room = std::min(sizeof buffer, kMaxInputBytes - text.size());
-        std::cin.read(buffer, static_cast<std::streamsize>(room));
-        const auto got = static_cast<std::size_t>(std::cin.gcount());
-        text.append(buffer, got);
+        const ssize_t got = ::read(STDIN_FILENO, buffer, room);
+        if (got < 0) {
+            if (errno == EINTR)
+                continue;
+            return std::nullopt;
+        }
         if (got == 0)
             break;
-    }
 
-    if (!std::cin && !std::cin.eof())
-        return std::nullopt;
+        text.append(buffer, static_cast<std::size_t>(got));
+    }
 
     lim::trim_trailing_newlines(text);
     return text;
