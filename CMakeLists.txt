@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21...3.31)
 project(tgn
-    VERSION 1.0.1
+    VERSION 1.1.0
     DESCRIPTION "Telegram notification tool"
     LANGUAGES CXX
 )
@@ -45,6 +45,7 @@ set(SOURCES
     src/limits.cpp
     src/http.cpp
     src/telegram.cpp
+    src/watch.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})

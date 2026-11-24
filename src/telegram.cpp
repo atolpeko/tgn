@@ -27,21 +27,16 @@ bool is_space(char c) noexcept {
 }
 
 void skip_space(std::string_view json, std::size_t& i) noexcept {
-    while (i < json.size() && is_space(json[i])) {
-        ++i;
-    }
+    while (i < json.size() && is_space(json[i])) ++i;
 }
 
 int hex_value(char c) noexcept {
-    if (c >= '0' && c <= '9') {
+    if (c >= '0' && c <= '9')
         return c - '0';
-    }
-    if (c >= 'a' && c <= 'f') {
+    if (c >= 'a' && c <= 'f')
         return c - 'a' + 10;
-    }
-    if (c >= 'A' && c <= 'F') {
+    if (c >= 'A' && c <= 'F')
         return c - 'A' + 10;
-    }
     return -1;
 }
 
@@ -68,31 +63,54 @@ std::uint32_t read_hex4(std::string_view json, std::size_t& i) noexcept {
 
     std::uint32_t value = 0;
     for (int digit = 0; digit < 4; ++digit, ++i) {
-        if (i >= json.size()) {
+        if (i >= json.size())
             return kReplacement;
-        }
         const int hex = hex_value(json[i]);
-        if (hex < 0) {
+        if (hex < 0)
             return kReplacement;
-        }
         value = (value << 4) | static_cast<std::uint32_t>(hex);
     }
     return value;
 }
 
-std::string read_json_string(std::string_view json, std::size_t& i) {
-    std::string out;
-    if (i >= json.size() || json[i] != '"') {
-        return out;
-    }
+struct JsonString {
+    std::string_view raw;
+    bool has_escapes = false;
+};
+
+// Scans the string that starts at the opening quote at `i`. Returns nullopt
+// when it is unterminated.
+std::optional<JsonString> scan_json_string(std::string_view json,
+                                           std::size_t& i) noexcept {
+    if (i >= json.size() || json[i] != '"')
+        return std::nullopt;
     ++i;
 
+    const std::size_t start = i;
+    bool has_escapes = false;
     while (i < json.size()) {
         const char c = json[i];
         if (c == '"') {
+            const std::string_view raw = json.substr(start, i - start);
             ++i;
-            return out;
+            return JsonString{raw, has_escapes};
         }
+        if (c == '\\') {
+            has_escapes = true;
+            i += 2;  // the escape and the character it covers
+            continue;
+        }
+        ++i;
+    }
+
+    return std::nullopt;
+}
+
+// Appends a string token (quotes excluded) to `out`, decoding its escapes.
+void append_decoded(std::string& out, std::string_view raw) {
+    std::size_t i = 0;
+    while (i < raw.size()) {
+        const char c = raw[i];
         if (c != '\\') {
             out.push_back(c);
             ++i;
@@ -100,10 +118,10 @@ std::string read_json_string(std::string_view json, std::size_t& i) {
         }
 
         ++i;  // consume the backslash
-        if (i >= json.size()) {
+        if (i >= raw.size())
             break;
-        }
-        const char escape = json[i];
+
+        const char escape = raw[i];
         ++i;
 
         switch (escape) {
@@ -123,14 +141,14 @@ std::string read_json_string(std::string_view json, std::size_t& i) {
                 out.push_back('\t');
                 break;
             case 'u': {
-                const std::uint32_t high = read_hex4(json, i);
+                const std::uint32_t high = read_hex4(raw, i);
                 const bool is_high_surrogate =
                     high >= 0xD800U && high <= 0xDBFFU;
-                if (is_high_surrogate && i + 6 <= json.size() &&
-                    json[i] == '\\' && json[i + 1] == 'u') {
+                if (is_high_surrogate && i + 6 <= raw.size() &&
+                    raw[i] == '\\' && raw[i + 1] == 'u') {
                     const std::size_t pair_start = i;
                     i += 2;
-                    const std::uint32_t low = read_hex4(json, i);
+                    const std::uint32_t low = read_hex4(raw, i);
                     if (low >= 0xDC00U && low <= 0xDFFFU) {
                         append_utf8(out, 0x10000U + ((high - 0xD800U) << 10) +
                                              (low - 0xDC00U));
@@ -148,8 +166,19 @@ std::string read_json_string(std::string_view json, std::size_t& i) {
                 break;
         }
     }
+}
 
-    return out;
+// Cuts `text` to at most `limit` bytes without splitting a UTF-8 sequence.
+void truncate_utf8(std::string& text, std::size_t limit) noexcept {
+    if (text.size() <= limit)
+        return;
+
+    // A continuation byte at the cut point means the cut is mid-sequence, so
+    // back up to the lead byte and drop the whole character.
+    std::size_t cut = limit;
+    while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0U) == 0x80U)
+        --cut;
+    text.resize(cut);
 }
 
 long read_json_int(std::string_view json, std::size_t& i) noexcept {
@@ -168,14 +197,13 @@ long read_json_int(std::string_view json, std::size_t& i) noexcept {
         }
         ++i;
     }
-    if (value > kMaxValue) {
+    if (value > kMaxValue)
         value = kMaxValue;
-    }
     return negative ? -value : value;
 }
 
 void parse_error_fields(std::string_view body, SendFailure& failure) {
-    std::string pending_key;
+    std::string pending_key;  // real keys fit in the small-string buffer
 
     std::size_t i = 0;
     while (i < body.size()) {
@@ -187,16 +215,27 @@ void parse_error_fields(std::string_view body, SendFailure& failure) {
         }
 
         if (c == '"') {
-            std::string text = read_json_string(body, i);
+            const auto token = scan_json_string(body, i);
+            if (!token)
+                break;
+
             std::size_t after = i;
             skip_space(body, after);
             if (after < body.size() && body[after] == ':') {
-                pending_key = std::move(text);
+                pending_key.clear();
+                if (token->has_escapes)
+                    append_decoded(pending_key, token->raw);
+                else
+                    pending_key.assign(token->raw);
                 i = after + 1;
                 continue;
             }
             if (pending_key == "description") {
-                failure.description = std::move(text);
+                failure.description.clear();
+                if (token->has_escapes)
+                    append_decoded(failure.description, token->raw);
+                else
+                    failure.description.assign(token->raw);
             }
             pending_key.clear();
             continue;
@@ -217,7 +256,7 @@ void parse_error_fields(std::string_view body, SendFailure& failure) {
     }
 
     if (failure.description.size() > kMaxDescriptionChars) {
-        failure.description.resize(kMaxDescriptionChars);
+        truncate_utf8(failure.description, kMaxDescriptionChars);
         failure.description += "...";
     }
 }
@@ -297,15 +336,13 @@ BotClient::BotClient(std::string token, std::string chat_id)
 std::optional<SendFailure> BotClient::send(std::string_view message) {
     auto result =
         http_.post_form(endpoint_, {{"chat_id", chat_id_}, {"text", message}});
-    if (!result.ok()) {
+    if (!result.ok())
         return SendFailure{to_bot_error(result.error),
                            std::move(result.detail)};
-    }
 
     const auto error_status = classify(result.response.status);
-    if (!error_status) {
+    if (!error_status)
         return std::nullopt;
-    }
 
     SendFailure failure{*error_status, {}};
     parse_error_fields(result.response.body, failure);

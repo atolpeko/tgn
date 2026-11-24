@@ -10,20 +10,18 @@ struct Args {
     std::optional<std::string> bot_token;  // nullopt => not supplied (env/cli)
     std::optional<std::string> chat_id;    // nullopt => not supplied (env/cli)
     std::optional<std::string> message;    // nullopt or "-" => read stdin
+
+    std::optional<std::string> message_option;      // -m/--message
+    std::optional<std::string> message_positional;  // positional argument
+    std::optional<long long> watch_pid;             // -w/--watch
+    std::optional<long> watch_timeout;              // --watch-timeout
 };
 
-enum class ExitCode : int {
-    Ok = 0,
-    Usage = 1,
-    Config = 2,
-    Network = 3,
+enum class Exit {
+    Success,  // -- help or --version
+    Failure,
 };
 
-enum class ParseResult {
-    ExitSuccess,  // -- help or --version
-    ExitFailure,
-};
-
-[[nodiscard]] std::variant<Args, ParseResult> parse_args(int argc, char** argv);
+[[nodiscard]] std::variant<Args, Exit> parse_args(int argc, char** argv);
 
 }  // namespace cli
