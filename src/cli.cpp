@@ -11,8 +11,8 @@ void define_args(CLI::App& app, Args& out) {
     app.usage("USAGE:\ntgn [options] <message>\n<command> | tgn [options]");
     app.footer(
         "Use '--' before a message that starts with '-'.\n"
-        "Exit codes: 0 ok, 1 usage error, 2 config error, 3 Telegram "
-        "connection error");
+        "Exit codes: 0 ok, 1 usage error, 2 config error (token/chat), 3 "
+        "network, rate limit or server error");
 
     app.add_option(
            "message", out.message,
@@ -36,7 +36,7 @@ void handle_empty(const CLI::App& app, Args& args) {
     if (args.chat_id && args.chat_id->empty()) {
         args.chat_id.reset();
     }
-    
+
     // CLI11 leaves the optional empty for an explicitly empty message
     if (app.count("message") > 0 && !args.message) {
         args.message = std::string{};
@@ -51,7 +51,7 @@ std::variant<Args, ParseResult> parse_args(int argc, char** argv) {
     try {
         define_args(app, args);
         app.parse(argc, argv);
-        handle_empty(app, args);  
+        handle_empty(app, args);
     } catch (const CLI::ParseError& e) {
         // CLI11 reports help/version/usage errors by throwing
         return app.exit(e) == 0 ? ParseResult::ExitSuccess

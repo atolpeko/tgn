@@ -17,8 +17,8 @@
 #endif
 
 #include "cli.hpp"
-#include "telegram.hpp"
 #include "limits.hpp"
+#include "telegram.hpp"
 
 namespace tgn {
 namespace {
@@ -27,6 +27,37 @@ constexpr std::size_t kMaxInputBytes = lim::kMaxMessageBytes + 1;
 
 constexpr int to_int(cli::ExitCode code) noexcept {
     return static_cast<int>(code);
+}
+
+cli::ExitCode exit_code_for(tg::BotError error) noexcept {
+    switch (error) {
+        case tg::BotError::BadRequest:
+        case tg::BotError::Encoding:
+            return cli::ExitCode::Usage;
+        case tg::BotError::Unauthorized:
+        case tg::BotError::Forbidden:
+        case tg::BotError::NotFound:
+            return cli::ExitCode::Config;
+        case tg::BotError::Initialization:
+        case tg::BotError::Transport:
+        case tg::BotError::Timeout:
+        case tg::BotError::RateLimited:
+        case tg::BotError::ServerError:
+        case tg::BotError::Unknown:
+            return cli::ExitCode::Network;
+    }
+    return cli::ExitCode::Network;
+}
+
+void report_send_failure(const tg::SendFailure& failure) {
+    std::cerr << "tgn: failed to send message: " << failure.error;
+    if (!failure.description.empty()) {
+        std::cerr << ": " << failure.description;
+    }
+    if (failure.retry_after > 0) {
+        std::cerr << " (retry after " << failure.retry_after << "s)";
+    }
+    std::cerr << '\n';
 }
 
 // True when stdin is a terminal
@@ -40,7 +71,7 @@ bool stdin_is_tty() noexcept {
 
 void report_too_long(std::optional<std::size_t> units) {
     std::cerr << "tgn: message is too long";
-    if (units) 
+    if (units)
         std::cerr << " (" << *units << " UTF-16 code units)";
     std::cerr << ", Telegram allows " << lim::kMaxMessageLength << '\n';
 }
@@ -59,11 +90,11 @@ std::optional<std::string> read_stdin() {
         std::cin.read(buffer, static_cast<std::streamsize>(room));
         const auto got = static_cast<std::size_t>(std::cin.gcount());
         text.append(buffer, got);
-        if (got == 0) 
+        if (got == 0)
             break;
     }
 
-    if (!std::cin && !std::cin.eof()) 
+    if (!std::cin && !std::cin.eof())
         return std::nullopt;
 
     lim::trim_trailing_newlines(text);
@@ -71,7 +102,7 @@ std::optional<std::string> read_stdin() {
 }
 
 bool credentials_present(const cli::Args& args) noexcept {
-    if (args.bot_token && args.chat_id) 
+    if (args.bot_token && args.chat_id)
         return true;
 
     std::cerr << "tgn: missing bot token or chat ID (use -h for help)\n";
@@ -151,10 +182,9 @@ int main(int argc, char** argv) {
     }
 
     tg::BotClient client(std::move(*args.bot_token), std::move(*args.chat_id));
-    const tg::BotError error = client.send(*message);
-    if (error != tg::BotError::None) {
-        std::cerr << "tgn: failed to send message: " << error << '\n';
-        return tgn::to_int(cli::ExitCode::Network);
+    if (const auto failure = client.send(*message)) {
+        tgn::report_send_failure(*failure);
+        return tgn::to_int(tgn::exit_code_for(failure->error));
     }
 
     return tgn::to_int(cli::ExitCode::Ok);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 
@@ -11,13 +12,13 @@ struct CurlDeleter {
 };
 
 enum class BotError {
-    None,
     Initialization,
     Encoding,
     Transport,
     Timeout,
     Unauthorized,
     Forbidden,
+    NotFound,
     RateLimited,
     BadRequest,
     ServerError,
@@ -25,6 +26,12 @@ enum class BotError {
 };
 
 std::ostream& operator<<(std::ostream& os, BotError e);
+
+struct SendFailure {
+    BotError error;
+    std::string description;
+    long retry_after = 0;
+};
 
 class BotClient {
 public:
@@ -35,11 +42,9 @@ public:
     BotClient(BotClient&&) noexcept = default;
     BotClient& operator=(BotClient&&) noexcept = default;
 
-    [[nodiscard]] BotError send(const std::string& message);
+    [[nodiscard]] std::optional<SendFailure> send(const std::string& message);
 
 private:
-    bool configure(const std::string& url, const std::string& body);
-
     std::unique_ptr<void, CurlDeleter> curl_;
     std::string token_;
     std::string chat_id_;

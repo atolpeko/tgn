@@ -66,8 +66,10 @@ df -h / | tgn
 | Code | Meaning |
 | --- | --- |
 | 0 | message sent |
-| 1 | usage error: bad arguments, empty message, invalid UTF-8, or message over the limit |
-| 2 | missing bot token or chat ID |
-| 3 | the Telegram request failed (network, auth, rate limit, server) |
+| 1 | usage error: bad arguments, empty message, invalid UTF-8, message over the limit, or the Bot API rejected the message |
+| 2 | missing bot token or chat ID, or the Bot API rejected them |
+| 3 | the request failed: network, timeout, rate limit, or server error |
+
+Failures print the reason the Bot API returned.
 
 
