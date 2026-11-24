@@ -1,17 +1,13 @@
 #pragma once
 
 #include <iosfwd>
-#include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
+
+#include "http.hpp"
 
 namespace tg {
-
-struct CurlHandle;
-
-struct CurlDeleter {
-    void operator()(CurlHandle* handle) const noexcept;
-};
 
 enum class BotError {
     Initialization,
@@ -44,10 +40,10 @@ public:
     BotClient(BotClient&&) noexcept = default;
     BotClient& operator=(BotClient&&) noexcept = default;
 
-    [[nodiscard]] std::optional<SendFailure> send(const std::string& message);
+    [[nodiscard]] std::optional<SendFailure> send(std::string_view message);
 
 private:
-    std::unique_ptr<CurlHandle, CurlDeleter> curl_;
+    http::Client http_;
     std::string token_;
     std::string chat_id_;
 };

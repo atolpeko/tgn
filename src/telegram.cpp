@@ -1,13 +1,7 @@
 #include "telegram.hpp"
 
-#include <curl/curl.h>
-
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
-#include <limits>
-#include <memory>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -17,46 +11,9 @@
 namespace tg {
 namespace {
 
-class CurlGlobal {
-public:
-    CurlGlobal() : ok_(curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK) {}
-    ~CurlGlobal() {
-        if (ok_)
-            curl_global_cleanup();
-    }
-
-    CurlGlobal(const CurlGlobal&) = delete;
-    CurlGlobal& operator=(const CurlGlobal&) = delete;
-
-    bool ok() const { return ok_; }
-
-private:
-    bool ok_;
-};
-
-CurlHandle* curl_init() {
-    static CurlGlobal guard;
-    return guard.ok() ? static_cast<CurlHandle*>(curl_easy_init()) : nullptr;
-}
-
-constexpr long kConnectTimeoutSeconds = 10;
-constexpr long kTotalTimeoutSeconds = 30;
-
 constexpr std::string_view kApiPrefix = "https://api.telegram.org/bot";
 constexpr std::string_view kSendMessage = "/sendMessage";
-constexpr std::string_view kChatField = "chat_id=";
-constexpr std::string_view kTextField = "&text=";
-constexpr std::size_t kMaxResponseBytes = 8 * 1024;
 constexpr std::size_t kMaxDescriptionChars = 300;
-
-std::size_t collect_body(char* data, std::size_t size, std::size_t nmemb,
-                         void* userdata) {
-    auto* body = static_cast<std::string*>(userdata);
-    const std::size_t bytes = size * nmemb;
-    const std::size_t room = kMaxResponseBytes - body->size();
-    body->append(data, std::min(bytes, room));
-    return bytes;
-}
 
 bool is_space(char c) noexcept {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
@@ -258,79 +215,7 @@ void parse_error_fields(std::string_view body, SendFailure& failure) {
     }
 }
 
-struct CurlFree {
-    void operator()(char* data) const noexcept { curl_free(data); }
-};
-
-// Owns the percent-encoded string libcurl allocated; nothing is copied.
-struct Escaped {
-    std::unique_ptr<char, CurlFree> data;
-    std::size_t size = 0;
-
-    [[nodiscard]] std::string_view view() const noexcept {
-        return {data.get(), size};
-    }
-};
-
-CURL* raw(CurlHandle* handle) noexcept {
-    return reinterpret_cast<CURL*>(handle);  
-}
-
-std::optional<Escaped> form_escape(CURL* curl, std::string_view text) {
-    if (text.size() >
-        static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-        return std::nullopt;  // libcurl takes an int length
-    }
-
-    char* escaped = curl_easy_escape(curl, text.empty() ? "" : text.data(),
-                                     static_cast<int>(text.size()));
-    if (escaped == nullptr) {
-        return std::nullopt;
-    }
-
-    return Escaped{std::unique_ptr<char, CurlFree>{escaped},
-                   std::strlen(escaped)};
-}
-
-// CURLOPT_POSTFIELDS keeps the pointer, so `body` must outlive
-// curl_easy_perform; CURLOPT_COPYPOSTFIELDS would hide that requirement by
-// copying the whole body.
-bool configure(CURL* curl, const std::string& url, const std::string& body,
-               std::string* response, char* error_buffer) {
-    return curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer) ==
-               CURLE_OK &&
-           curl_easy_setopt(curl, CURLOPT_URL, url.c_str()) == CURLE_OK &&
-           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str()) ==
-               CURLE_OK &&
-           curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE,
-                            static_cast<curl_off_t>(body.size())) == CURLE_OK &&
-           curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT,
-                            kConnectTimeoutSeconds) == CURLE_OK &&
-           curl_easy_setopt(curl, CURLOPT_TIMEOUT, kTotalTimeoutSeconds) ==
-               CURLE_OK &&
-           curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L) == CURLE_OK &&
-           curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_body) ==
-               CURLE_OK &&
-           curl_easy_setopt(curl, CURLOPT_WRITEDATA, response) == CURLE_OK;
-}
-
-std::string detail_from_buffer(const char* error_buffer) {
-    std::string detail = error_buffer;
-    while (!detail.empty() &&
-           (detail.back() == '\n' || detail.back() == '\r')) {
-        detail.pop_back();
-    }
-    return detail;
-}
-
-std::optional<tg::BotError> classify(CURLcode rc, long http_code) noexcept {
-    if (rc == CURLE_OPERATION_TIMEDOUT) {
-        return tg::BotError::Timeout;
-    }
-    if (rc != CURLE_OK) {
-        return tg::BotError::Transport;
-    }
-
+std::optional<tg::BotError> classify(long http_code) noexcept {
     switch (http_code) {
         case 200:
             return std::nullopt;
@@ -350,11 +235,25 @@ std::optional<tg::BotError> classify(CURLcode rc, long http_code) noexcept {
     }
 }
 
-}  // namespace
-
-void CurlDeleter::operator()(CurlHandle* handle) const noexcept {
-    curl_easy_cleanup(raw(handle));
+tg::BotError to_bot_error(http::Error error) noexcept {
+    switch (error) {
+        case http::Error::None:
+            return tg::BotError::Unknown;  // unreachable: callers check ok()
+        case http::Error::Initialization:
+            return tg::BotError::Initialization;
+        case http::Error::Encoding:
+            return tg::BotError::Encoding;
+        case http::Error::Transport:
+            return tg::BotError::Transport;
+        case http::Error::Timeout:
+            return tg::BotError::Timeout;
+        case http::Error::Unknown:
+            return tg::BotError::Unknown;
+    }
+    return tg::BotError::Unknown;
 }
+
+}  // namespace
 
 std::ostream& operator<<(std::ostream& os, BotError e) {
     switch (e) {
@@ -386,66 +285,27 @@ std::ostream& operator<<(std::ostream& os, BotError e) {
 }
 
 BotClient::BotClient(std::string token, std::string chat_id)
-    : curl_(curl_init()),
-      token_(std::move(token)),
-      chat_id_(std::move(chat_id)) {}
+    : token_(std::move(token)), chat_id_(std::move(chat_id)) {}
 
-std::optional<SendFailure> BotClient::send(const std::string& message) {
-    CURL* const curl = raw(curl_.get());
-    if (curl == nullptr) {
-        return SendFailure{BotError::Initialization,
-                           "the libcurl handle is unavailable"};
-    }
-
-    const auto escaped_chat_id = form_escape(curl, chat_id_);
-    const auto escaped_text = form_escape(curl, message);
-    if (!escaped_chat_id || !escaped_text) {
-        return SendFailure{BotError::Encoding, "could not encode the request"};
-    }
-
+std::optional<SendFailure> BotClient::send(std::string_view message) {
     std::string url;
     url.reserve(kApiPrefix.size() + token_.size() + kSendMessage.size());
     url.append(kApiPrefix).append(token_).append(kSendMessage);
 
-    std::string body;
-    body.reserve(kChatField.size() + escaped_chat_id->view().size() +
-                 kTextField.size() + escaped_text->view().size());
-    body.append(kChatField)
-        .append(escaped_chat_id->view())
-        .append(kTextField)
-        .append(escaped_text->view());
-
-    std::string response;
-    char error_buffer[CURL_ERROR_SIZE] = {};
-    if (!configure(curl, url, body, &response, error_buffer)) {
-        return SendFailure{BotError::Initialization,
-                           "could not configure the request"};
+    auto result =
+        http_.post_form(url, {{"chat_id", chat_id_}, {"text", message}});
+    if (!result.ok()) {
+        return SendFailure{to_bot_error(result.error),
+                           std::move(result.detail)};
     }
 
-    const CURLcode perform = curl_easy_perform(curl);
-    if (perform != CURLE_OK) {
-        std::string detail = detail_from_buffer(error_buffer);
-        if (detail.empty()) {
-            detail = curl_easy_strerror(perform);
-        }
-        return SendFailure{classify(perform, 0).value_or(BotError::Transport),
-                           std::move(detail)};
-    }
-
-    auto http_code = 0L;
-    if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code) !=
-        CURLE_OK) {
-        return SendFailure{BotError::Unknown,
-                           "libcurl reported no HTTP status"};
-    }
-
-    const auto status = classify(CURLE_OK, http_code);
-    if (!status) {
+    const auto error_status = classify(result.response.status);
+    if (!error_status) {
         return std::nullopt;
     }
 
-    SendFailure failure{*status, {}};
-    parse_error_fields(response, failure);
+    SendFailure failure{*error_status, {}};
+    parse_error_fields(result.response.body, failure);
     return failure;
 }
 

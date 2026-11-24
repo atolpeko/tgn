@@ -24,6 +24,7 @@ set(SOURCES
     src/main.cpp
     src/cli.cpp
     src/limits.cpp
+    src/http.cpp
     src/telegram.cpp
 )
 
