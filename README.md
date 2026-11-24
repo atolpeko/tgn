@@ -4,9 +4,11 @@ A Telegram notification tool.
 
 ## Requirements
 
-- CMake ≥ 3.16 and a C++17 compiler (GCC and Clang), Make or Ninja.
-- libcurl with headers.
-- CLI11.
+Linux or macOS, with:
+
+- CMake ≥ 3.21 and a C++17 compiler: GCC ≥ 11 or Clang ≥ 14.
+- libcurl ≥ 7.68 with headers.
+- CLI11 ≥ 2.1.
 
 ```bash
 sudo dnf install gcc-c++ cmake libcurl-devel cli11-devel       # Fedora/RHEL
@@ -22,6 +24,12 @@ cmake --build build -j
 ./build/tgn --version
 ```
 
+### Install
+
+```bash
+cmake --install build --prefix "$HOME/.local"
+```
+
 ## Usage
 
 ```
@@ -32,6 +40,11 @@ tgn [options] -- -          # read the message from stdin
 
 All text is UTF-8, the length limit is Telegram's: **4096 UTF-16
 code units**.
+
+The message comes from the positional argument, or from stdin when the
+argument is `-` or absent and stdin is not a terminal. Trailing newlines
+are stripped either way. An empty message, invalid UTF-8, or text over the
+limit is a usage error and nothing is sent.
 
 ### Options
 
@@ -61,8 +74,10 @@ df -h / | tgn
 | Code | Meaning |
 | --- | --- |
 | 0 | message sent |
-| 1 | usage error: bad arguments, empty message, or message over the limit |
-| 2 | missing bot token or chat ID |
-| 3 | the Telegram request failed (network, auth, rate limit, server) |
+| 1 | usage error: bad arguments, empty message, invalid UTF-8, message over the limit, or the Bot API rejected the message |
+| 2 | missing bot token or chat ID, or the Bot API rejected them |
+| 3 | the request failed: network, timeout, rate limit, or server error |
+
+Failures print the reason the Bot API returned.
 
 

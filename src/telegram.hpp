@@ -1,26 +1,22 @@
 #pragma once
 
-#include <memory>
-#include <ostream>
+#include <iosfwd>
+#include <optional>
 #include <string>
+#include <string_view>
+
+#include "http.hpp"
 
 namespace tg {
 
-// Telegram's limit for the text of one message, in UTF-16 code units.
-inline constexpr std::size_t kMaxMessageLength = 4096;
-
-struct CurlDeleter {
-    void operator()(void* handle) const noexcept;
-};
-
 enum class BotError {
-    None,
     Initialization,
     Encoding,
     Transport,
     Timeout,
     Unauthorized,
     Forbidden,
+    NotFound,
     RateLimited,
     BadRequest,
     ServerError,
@@ -28,6 +24,12 @@ enum class BotError {
 };
 
 std::ostream& operator<<(std::ostream& os, BotError e);
+
+struct SendFailure {
+    BotError error;
+    std::string description;
+    long retry_after = 0;
+};
 
 class BotClient {
 public:
@@ -38,14 +40,12 @@ public:
     BotClient(BotClient&&) noexcept = default;
     BotClient& operator=(BotClient&&) noexcept = default;
 
-    [[nodiscard]] BotError send(const std::string& message);
+    [[nodiscard]] std::optional<SendFailure> send(std::string_view message);
 
 private:
-    bool configure(const std::string& url, const std::string& body);
-
-    std::unique_ptr<void, CurlDeleter> curl_;
-    std::string token_;
+    http::Client http_;
     std::string chat_id_;
+    std::string endpoint_;
 };
 
 }  // namespace tg
