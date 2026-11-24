@@ -56,6 +56,7 @@ public:
     Client(Client&&) noexcept = default;
     Client& operator=(Client&&) noexcept = default;
 
+    // `url` must be NUL-terminated 
     [[nodiscard]] Result post(const std::string& url, std::string_view body);
 
     [[nodiscard]] Result post_form(const std::string& url,

@@ -122,21 +122,43 @@ std::optional<Escaped> form_escape(CURL* curl, std::string_view text) {
                    std::strlen(escaped)};
 }
 
-// The length of `text` once curl_easy_escape has encoded it: everything but
-// A-Z a-z 0-9 - . _ ~ grows to three bytes.
+bool is_unreserved(char c) noexcept {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+           (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' ||
+           c == '~';
+}
+
+// The length of `text` once curl_easy_escape has encoded it.
 std::size_t encoded_length(std::string_view text) noexcept {
     std::size_t total = 0;
     for (const char c : text) {
-        const bool unreserved = (c >= 'A' && c <= 'Z') ||
-                                (c >= 'a' && c <= 'z') ||
-                                (c >= '0' && c <= '9') || c == '-' ||
-                                c == '.' || c == '_' || c == '~';
-        total += unreserved ? 1 : 3;
+        total += is_unreserved(c) ? std::size_t{1} : std::size_t{3};
     }
     return total;
 }
 
-// Builds "name=value&name=value" with every name and value percent-encoded.
+// True when percent-encoding would change `text`; stops at the first such byte.
+bool needs_escape(std::string_view text) noexcept {
+    return std::any_of(text.begin(), text.end(),
+                       [](char c) { return !is_unreserved(c); });
+}
+
+// Appends one form component, escaping it only when that would change it.
+bool append_form_value(CURL* curl, std::string& out, std::string_view text) {
+    if (!needs_escape(text)) {
+        out.append(text);
+        return true;
+    }
+
+    const auto escaped = form_escape(curl, text);
+    if (!escaped) {
+        return false;
+    }
+    out.append(escaped->view());
+    return true;
+}
+
+// Builds "name=value&name=value", percent-encoded, in a single allocation.
 std::optional<std::string> form_body(CURL* curl,
                                      std::initializer_list<FormField> fields) {
     std::size_t size = 0;
@@ -152,22 +174,18 @@ std::optional<std::string> form_body(CURL* curl,
 
     bool first = true;
     for (const auto& field : fields) {
-        const auto name = form_escape(curl, field.first);
-        if (!name) {
-            return std::nullopt;
-        }
-        const auto value = form_escape(curl, field.second);
-        if (!value) {
-            return std::nullopt;
-        }
-
         if (!first) {
             body.push_back('&');
         }
         first = false;
-        body.append(name->view());
+
+        if (!append_form_value(curl, body, field.first)) {
+            return std::nullopt;
+        }
         body.push_back('=');
-        body.append(value->view());
+        if (!append_form_value(curl, body, field.second)) {
+            return std::nullopt;
+        }
     }
 
     return body;
