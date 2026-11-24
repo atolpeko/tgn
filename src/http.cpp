@@ -4,11 +4,7 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstring>
 #include <initializer_list>
-#include <limits>
-#include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -91,32 +87,7 @@ Error error_for(CURLcode rc) noexcept {
     return rc == CURLE_OPERATION_TIMEDOUT ? Error::Timeout : Error::Transport;
 }
 
-struct CurlFree {
-    void operator()(char* data) const noexcept { curl_free(data); }
-};
-
-// Owns the percent-encoded string libcurl allocated; nothing is copied.
-struct Escaped {
-    std::unique_ptr<char, CurlFree> data;
-    std::size_t size = 0;
-
-    [[nodiscard]] std::string_view view() const noexcept {
-        return {data.get(), size};
-    }
-};
-
-std::optional<Escaped> form_escape(CURL* curl, std::string_view text) {
-    if (text.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
-        return std::nullopt;  // libcurl takes an int length
-
-    char* escaped = curl_easy_escape(curl, text.empty() ? "" : text.data(),
-                                     static_cast<int>(text.size()));
-    if (escaped == nullptr)
-        return std::nullopt;
-
-    return Escaped{std::unique_ptr<char, CurlFree>{escaped},
-                   std::strlen(escaped)};
-}
+constexpr char kHexDigits[] = "0123456789ABCDEF";
 
 bool is_unreserved(char c) noexcept {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
@@ -124,7 +95,8 @@ bool is_unreserved(char c) noexcept {
            c == '~';
 }
 
-// The length of `text` once curl_easy_escape has encoded it.
+// The length of `text` once percent-encoded: everything but A-Z a-z 0-9 - . _ ~
+// grows from one byte to three.
 std::size_t encoded_length(std::string_view text) noexcept {
     std::size_t total = 0;
     for (const char c : text)
@@ -138,24 +110,33 @@ bool needs_escape(std::string_view text) noexcept {
                        [](char c) { return !is_unreserved(c); });
 }
 
-// Appends one form component, escaping it only when that would change it.
-bool append_form_value(CURL* curl, std::string& out, std::string_view text) {
+// Percent-encodes `text` into `out`, matching curl_easy_escape byte for byte:
+// uppercase hex, unreserved bytes kept, a space becomes %20.
+void append_escaped(std::string& out, std::string_view text) {
+    for (const char c : text) {
+        if (is_unreserved(c)) {
+            out.push_back(c);
+            continue;
+        }
+        const auto byte = static_cast<unsigned char>(c);
+        out.push_back('%');
+        out.push_back(kHexDigits[byte >> 4]);
+        out.push_back(kHexDigits[byte & 0x0FU]);
+    }
+}
+
+// Appends one form component, encoding it only when that would change it.
+void append_form_value(std::string& out, std::string_view text) {
     if (!needs_escape(text)) {
-        out.append(text);
-        return true;
+        out.append(text);  // memcpy, no per-byte branching
+        return;
     }
 
-    const auto escaped = form_escape(curl, text);
-    if (!escaped)
-        return false;
-
-    out.append(escaped->view());
-    return true;
+    append_escaped(out, text);
 }
 
 // Builds "name=value&name=value", percent-encoded, in a single allocation.
-std::optional<std::string> form_body(CURL* curl,
-                                     std::initializer_list<FormField> fields) {
+std::string form_body(std::initializer_list<FormField> fields) {
     std::size_t size = 0;
     for (const auto& field : fields)
         size += encoded_length(field.first) + 1 + encoded_length(field.second);
@@ -172,12 +153,9 @@ std::optional<std::string> form_body(CURL* curl,
             body.push_back('&');
         first = false;
 
-        if (!append_form_value(curl, body, field.first))
-            return std::nullopt;
-
+        append_form_value(body, field.first);
         body.push_back('=');
-        if (!append_form_value(curl, body, field.second))
-            return std::nullopt;
+        append_form_value(body, field.second);
     }
 
     return body;
@@ -222,16 +200,7 @@ Result Client::post(const std::string& url, std::string_view body) {
 
 Result Client::post_form(const std::string& url,
                          std::initializer_list<FormField> fields) {
-    CURL* const curl = raw(curl_.get());
-    if (curl == nullptr)
-        return Result{
-            Error::Initialization, {}, "the libcurl handle is unavailable"};
-
-    const auto body = form_body(curl, fields);
-    if (!body)
-        return Result{Error::Encoding, {}, "could not encode the request"};
-
-    return post(url, *body);
+    return post(url, form_body(fields));
 }
 
 }  // namespace http
