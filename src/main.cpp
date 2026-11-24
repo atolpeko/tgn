@@ -14,6 +14,7 @@
 #include "cli.hpp"
 #include "limits.hpp"
 #include "telegram.hpp"
+#include "watch.hpp"
 
 namespace tgn {
 
@@ -170,6 +171,21 @@ int main(int argc, char** argv) {
 
     if (!tgn::credentials_present(args)) {
         return tgn::to_int(tgn::ExitCode::Config);
+    }
+
+    if (args.watch_pid) {
+        const auto pid = static_cast<pid_t>(*args.watch_pid);
+        if (pid == getpid()) {
+            std::cerr << "tgn: cannot watch tgn's own process\n";
+            return tgn::to_int(tgn::ExitCode::Config);
+        }
+        if (!watch::ps_exists(pid)) {
+            std::cerr << "tgn: pid " << pid << " is not running; sending now\n";
+        } else if (const auto failure =
+                       watch::wait_for_exit(pid, args.watch_timeout)) {
+            std::cerr << "tgn: " << *failure << '\n';
+            return tgn::to_int(tgn::ExitCode::Config);
+        }
     }
 
     tg::BotClient client(std::move(*args.bot_token), std::move(*args.chat_id));

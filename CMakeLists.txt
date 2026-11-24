@@ -45,6 +45,7 @@ set(SOURCES
     src/limits.cpp
     src/http.cpp
     src/telegram.cpp
+    src/watch.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
